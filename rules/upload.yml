@@ -1,0 +1,55 @@
+rules:
+  - id: flask-upload-tainted-path
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      El nombre de archivo enviado por el cliente se usa para construir la
+      ruta de destino. Permite path traversal y elegir extensiones peligrosas.
+      Usa werkzeug.utils.secure_filename o un nombre generado por el servidor.
+    metadata:
+      cwe: "CWE-434: Unrestricted Upload of File with Dangerous Type"
+      secfix_cwe: CWE-434
+      owasp: "A04:2021 - Insecure Design"
+    pattern-sources:
+      - pattern: flask.request.files
+    pattern-sanitizers:
+      - pattern: werkzeug.utils.secure_filename(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $F.save($P, ...)
+              - pattern: open($P, ...)
+          - focus-metavariable: $P
+
+  - id: flask-upload-no-extension-allowlist
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Se guarda un archivo subido sin verificar su extensión contra una
+      lista blanca. Un atacante puede subir archivos ejecutables (.php,
+      .html, ...). Valida la extensión final contra un conjunto permitido.
+    metadata:
+      cwe: "CWE-434: Unrestricted Upload of File with Dangerous Type"
+      secfix_cwe: CWE-434
+      owasp: "A04:2021 - Insecure Design"
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $FILE = flask.request.files[...]
+              ...
+          - pattern-inside: |
+              $FILE = flask.request.files.get(...)
+              ...
+      - pattern: $FILE.save(...)
+      - pattern-not-inside: |
+          if <... $A not in $B ...>:
+            ...
+          ...
+      - pattern-not-inside: |
+          if <... $A in $B ...>:
+            ...
+          ...
+      - pattern-not-inside: |
+          if <... $A in $B ...>:
+            ...

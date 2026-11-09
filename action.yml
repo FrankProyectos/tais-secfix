@@ -1,0 +1,60 @@
+name: "secfix: SAST + LLM para pull requests"
+description: >-
+  Detecta SQLi, XSS y carga insegura de archivos con Semgrep, filtra falsos
+  positivos con un LLM (GitHub Models), genera parches, los valida (compila,
+  re-escaneo, tests y exploit) y los publica como sugerencias en el PR.
+branding:
+  icon: shield
+  color: blue
+inputs:
+  rules:
+    description: Carpeta o archivo de reglas Semgrep (por defecto, las reglas incluidas en la acción)
+    default: ""
+  mode:
+    description: "full (Semgrep + LLM) o sast-only (solo Semgrep)"
+    default: full
+  model:
+    description: Modelo de GitHub Models
+    default: openai/gpt-4o-mini
+  test-cmd:
+    description: Comando de pruebas para V3 (se ejecuta sobre una copia con el parche aplicado)
+    default: ""
+  exploit-cmd:
+    description: Comando de pruebas de explotación para V4
+    default: ""
+  fail-on-findings:
+    description: Falla el check si quedan vulnerabilidades confirmadas
+    default: "true"
+  github-token:
+    description: Token para la API de GitHub y GitHub Models (necesita models:read y pull-requests:write)
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Instalar secfix
+      shell: bash
+      run: python -m pip install -q -r "${{ github.action_path }}/requirements.txt"
+    - name: Ejecutar secfix
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        PYTHONPATH: ${{ github.action_path }}
+        SECFIX_MODEL: ${{ inputs.model }}
+      run: |
+        RULES="${{ inputs.rules }}"
+        [ -z "$RULES" ] && RULES="${{ github.action_path }}/rules"
+        ARGS=(pr --rules "$RULES" --mode "${{ inputs.mode }}" --metrics-out secfix-out/metrics.json)
+        [ -n "${{ inputs.test-cmd }}" ] && ARGS+=(--test-cmd "${{ inputs.test-cmd }}")
+        [ -n "${{ inputs.exploit-cmd }}" ] && ARGS+=(--exploit-cmd "${{ inputs.exploit-cmd }}")
+        [ "${{ inputs.fail-on-findings }}" != "true" ] && ARGS+=(--no-fail)
+        python -m secfix.cli "${ARGS[@]}"
+    - name: Guardar métricas
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: secfix-metrics-${{ github.run_id }}-${{ github.run_attempt }}
+        path: secfix-out/
+        if-no-files-found: ignore

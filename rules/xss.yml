@@ -1,0 +1,52 @@
+rules:
+  - id: flask-xss-tainted-html
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Datos de la petición HTTP se devuelven como HTML sin escapar
+      (XSS reflejado). Escapa la salida (markupsafe.escape) o usa
+      render_template con autoescape.
+    metadata:
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+      secfix_cwe: CWE-79
+      owasp: "A03:2021 - Injection"
+    pattern-sources:
+      - pattern: flask.request.$ATTR
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: markupsafe.escape(...)
+          - pattern: flask.escape(...)
+          - pattern: html.escape(...)
+          - pattern: flask.jsonify(...)
+          - pattern: flask.render_template(...)
+          # plantilla constante: Jinja2 escapa las variables (autoescape)
+          - pattern: flask.render_template_string("...", ...)
+          - patterns:
+              - pattern: flask.render_template_string($T, ...)
+              - pattern-not: flask.render_template_string(<... flask.request.$A ...>, ...)
+              - metavariable-regex:
+                  metavariable: $T
+                  regex: ^[A-Z_][A-Z0-9_]*$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.render_template_string($X, ...)
+              - pattern: flask.make_response($X, ...)
+              - pattern: markupsafe.Markup($X)
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          @$BP.route(...)
+                          def $F(...):
+                            ...
+                      - pattern-inside: |
+                          @$BP.get(...)
+                          def $F(...):
+                            ...
+                      - pattern-inside: |
+                          @$BP.post(...)
+                          def $F(...):
+                            ...
+                  - pattern: return $X
+          - focus-metavariable: $X

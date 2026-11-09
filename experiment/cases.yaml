@@ -1,0 +1,130 @@
+# Ground truth del experimento.
+# vulnerable: etiqueta manual (verdad de referencia).
+# functional: petición legítima que debe seguir funcionando tras un parche (V3).
+# exploit: ataque que demuestra la vulnerabilidad (V4).
+cases:
+  # ---------------- CWE-89 SQL injection ----------------
+  - id: s01_sqli_fstring
+    cwe: CWE-89
+    vulnerable: true
+    functional: {method: GET, path: /users/by-name, query: {name: alice}, expect_contains: alice@example.com}
+    exploit: {type: sqli, method: GET, path: /users/by-name, param: name, in: query}
+  - id: s02_sqli_percent_like
+    cwe: CWE-89
+    vulnerable: true
+    functional: {method: GET, path: /users/search, query: {q: ali}, expect_contains: alice@example.com}
+    exploit: {type: sqli, method: GET, path: /users/search, param: q, in: query}
+  - id: s03_sqli_concat_id
+    cwe: CWE-89
+    vulnerable: true
+    functional: {method: GET, path: /users/detail, query: {id: "1"}, expect_contains: alice@example.com}
+    exploit: {type: sqli, method: GET, path: /users/detail, param: id, in: query}
+  - id: s04_sqli_format_post
+    cwe: CWE-89
+    vulnerable: true
+    functional: {method: POST, path: /users/lookup, form: {email: bob@example.com}, expect_contains: Fan de Flask}
+    exploit: {type: sqli, method: POST, path: /users/lookup, param: email, in: form}
+  - id: s05_sqli_multistep
+    cwe: CWE-89
+    vulnerable: true
+    functional: {method: GET, path: /users/filter, query: {name: bob}, expect_contains: bob@example.com}
+    exploit: {type: sqli, method: GET, path: /users/filter, param: name, in: query}
+  - id: s06_safe_sqli_order_whitelist
+    cwe: CWE-89
+    vulnerable: false
+    functional: {method: GET, path: /users/sorted, query: {sort: email}, expect_contains: alice@example.com}
+    exploit: {type: sqli, method: GET, path: /users/sorted, param: sort, in: query}
+  - id: s07_safe_sqli_int_cast
+    cwe: CWE-89
+    vulnerable: false
+    functional: {method: GET, path: /users/by-id, query: {id: "2"}, expect_contains: bob@example.com}
+    exploit: {type: sqli, method: GET, path: /users/by-id, param: id, in: query}
+  - id: s08_safe_sqli_placeholders
+    cwe: CWE-89
+    vulnerable: false
+    functional: {method: GET, path: /users/many, query: {ids: "1,2"}, expect_contains: bob@example.com}
+    exploit: {type: sqli, method: GET, path: /users/many, param: ids, in: query}
+
+  # ---------------- CWE-79 Cross-site scripting ----------------
+  - id: x01_xss_fstring
+    cwe: CWE-79
+    vulnerable: true
+    functional: {method: GET, path: /hello, query: {name: Ana}, expect_contains: Ana}
+    exploit: {type: xss, method: GET, path: /hello, param: name, in: query}
+  - id: x02_xss_template_string
+    cwe: CWE-79
+    vulnerable: true
+    functional: {method: GET, path: /buscar, query: {q: flask}, expect_contains: flask}
+    exploit: {type: xss, method: GET, path: /buscar, param: q, in: query}
+  - id: x03_xss_make_response
+    cwe: CWE-79
+    vulnerable: true
+    functional: {method: POST, path: /comentarios, form: {texto: Buen post}, expect_contains: Buen post}
+    exploit: {type: xss, method: POST, path: /comentarios, param: texto, in: form}
+  - id: x04_xss_markup
+    cwe: CWE-79
+    vulnerable: true
+    functional: {method: GET, path: /aviso, query: {msg: Mantenimiento}, expect_contains: Mantenimiento}
+    exploit: {type: xss, method: GET, path: /aviso, param: msg, in: query}
+  - id: x05_xss_error_page
+    cwe: CWE-79
+    vulnerable: true
+    functional: {method: GET, path: /pagina, query: {p: otra}, expect_status: 404, expect_contains: otra}
+    exploit: {type: xss, method: GET, path: /pagina, param: p, in: query}
+  - id: x06_safe_xss_custom_escape
+    cwe: CWE-79
+    vulnerable: false
+    functional: {method: GET, path: /saludo, query: {name: Ana}, expect_contains: Ana}
+    exploit: {type: xss, method: GET, path: /saludo, param: name, in: query}
+  - id: x07_safe_xss_int
+    cwe: CWE-79
+    vulnerable: false
+    functional: {method: GET, path: /listado, query: {page: "3"}, expect_contains: "3"}
+    exploit: {type: xss, method: GET, path: /listado, param: page, in: query}
+  - id: x08_safe_xss_dict
+    cwe: CWE-79
+    vulnerable: false
+    functional: {method: GET, path: /bienvenida, query: {lang: en}, expect_contains: Welcome}
+    exploit: {type: xss, method: GET, path: /bienvenida, param: lang, in: query}
+
+  # ---------------- CWE-434 Carga insegura de archivos ----------------
+  - id: u01_upload_raw
+    cwe: CWE-434
+    vulnerable: true
+    functional: {method: POST, path: /upload, upload: file}
+    exploit: {type: upload, method: POST, path: /upload, param: file}
+  - id: u02_upload_secure_filename_only
+    cwe: CWE-434
+    vulnerable: true
+    functional: {method: POST, path: /avatar, upload: file}
+    exploit: {type: upload, method: POST, path: /avatar, param: file}
+  - id: u03_upload_blacklist
+    cwe: CWE-434
+    vulnerable: true
+    functional: {method: POST, path: /documentos, upload: file}
+    exploit: {type: upload, method: POST, path: /documentos, param: file}
+  - id: u04_upload_mimetype
+    cwe: CWE-434
+    vulnerable: true
+    functional: {method: POST, path: /fotos, upload: file}
+    exploit: {type: upload, method: POST, path: /fotos, param: file}
+  - id: u05_upload_substring_check
+    cwe: CWE-434
+    vulnerable: true
+    functional: {method: POST, path: /imagenes, upload: file}
+    exploit: {type: upload, method: POST, path: /imagenes, param: file}
+  - id: u06_safe_upload_helper_uuid
+    cwe: CWE-434
+    vulnerable: false
+    functional: {method: POST, path: /galeria, upload: file}
+    exploit: {type: upload, method: POST, path: /galeria, param: file}
+  - id: u07_safe_upload_magic
+    cwe: CWE-434
+    vulnerable: false
+    functional: {method: POST, path: /escaneos, upload: file}
+    exploit: {type: upload, method: POST, path: /escaneos, param: file}
+  - id: u08_safe_upload_allowed_file
+    cwe: CWE-434
+    vulnerable: false
+    functional: {method: POST, path: /adjuntos, upload: file}
+    exploit: {type: upload, method: POST, path: /adjuntos, param: file}

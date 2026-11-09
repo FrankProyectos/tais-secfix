@@ -1,0 +1,8 @@
+# Especificación de pruebas por ruta del laboratorio (V3 funcional + V4 explotación).
+# Clave: nombre del módulo en lab/routes/ (sin .py). Cada módulo puede tener varias entradas.
+# Si agregas una ruta nueva en un PR, agrega aquí su prueba legítima y su ataque.
+home:
+  - functional: {method: GET, path: /, query: {name: Ana}, expect_contains: Ana}
+    exploit: {type: xss, method: GET, path: /, param: name, in: query}
+  - functional: {method: GET, path: /users, query: {name: alice}, expect_contains: alice@example.com}
+    exploit: {type: sqli, method: GET, path: /users, param: name, in: query}

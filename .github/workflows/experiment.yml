@@ -1,0 +1,47 @@
+# Ejecuta el experimento C0 vs C1 usando GitHub Models con el GITHUB_TOKEN del job.
+# Actions > experiment > Run workflow. Descarga el artefacto con los resultados.
+name: experiment
+on:
+  workflow_dispatch:
+    inputs:
+      configs:
+        description: "Configuraciones (C0, C1, C1b)"
+        default: "C0,C1"
+      reps:
+        description: "Repeticiones"
+        default: "1"
+      rep_offset:
+        description: "Primera repetición (para continuar otro día)"
+        default: "0"
+      model:
+        description: "Modelo de GitHub Models"
+        default: "openai/gpt-4o-mini"
+
+permissions:
+  contents: read
+  models: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -q -r requirements.txt matplotlib
+      - name: Ejecutar experimento
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python experiment/run_experiment.py --configs "${{ inputs.configs }}" \
+            --reps "${{ inputs.reps }}" --rep-offset "${{ inputs.rep_offset }}" \
+            --model "${{ inputs.model }}" \
+            --out "experiment/results/runs_r${{ inputs.rep_offset }}.jsonl" || echo "Experimento detenido (ver log)"
+          python experiment/analyze.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-experimento-r${{ inputs.rep_offset }}
+          path: experiment/results/

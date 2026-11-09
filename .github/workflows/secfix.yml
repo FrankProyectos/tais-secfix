@@ -1,0 +1,28 @@
+# Se ejecuta en cada pull request: Semgrep + LLM + validación + sugerencias.
+name: secfix
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  models: read
+
+concurrency:
+  group: secfix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  secfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./
+        with:
+          rules: rules/
+          test-cmd: "python -m pytest -q lab/tests"
