@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 
 from secfix.context import apply_replacement
 from secfix.models import RepairGroup, Validation
@@ -35,6 +36,7 @@ class Validator:
         self.exploit_cmd = exploit_cmd
         self.harness_spec = harness_spec      # modo experimento: {functional, exploit}
         self.timeout = timeout
+        self._baseline = {}   # (ruta, comando) -> fallas sin parche
 
     # -- V1 -----------------------------------------------------------------
     @staticmethod
@@ -73,14 +75,53 @@ class Validator:
 
     # -- V3/V4 con comandos del repositorio (modo PR) ---------------------------
     def run_cmd_in_copy(self, rel_path, patched_text, cmd):
+        """Ejecuta `cmd` en una copia del repo. Devuelve (ok, salida, fallas).
+
+        Si el comando es pytest, `fallas` es el conjunto de tests que fallan
+        (leído de un reporte JUnit); si no, es None y solo cuenta el código de salida.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             dst = os.path.join(tmp, "repo")
             shutil.copytree(self.repo_root, dst, ignore=shutil.ignore_patterns(".git", "__pycache__", ".venv"))
-            pathlib.Path(dst, rel_path).write_text(patched_text, encoding="utf-8")
-            proc = subprocess.run(cmd, shell=True, cwd=dst, capture_output=True, text=True,
+            if patched_text is not None:
+                pathlib.Path(dst, rel_path).write_text(patched_text, encoding="utf-8")
+            junit = os.path.join(tmp, "junit.xml")
+            full = f"{cmd} --junitxml={junit}" if "pytest" in cmd else cmd
+            proc = subprocess.run(full, shell=True, cwd=dst, capture_output=True, text=True,
                                   timeout=self.timeout)
             tail = (proc.stdout + proc.stderr)[-800:]
-            return proc.returncode == 0, tail
+            failures = None
+            if os.path.exists(junit):
+                failures = set()
+                for tc in ET.parse(junit).getroot().iter("testcase"):
+                    if tc.find("failure") is not None or tc.find("error") is not None:
+                        failures.add(f"{tc.get('classname')}::{tc.get('name')}")
+            return proc.returncode == 0, tail, failures
+
+    def baseline_failures(self, rel_path, source, cmd):
+        key = (rel_path, cmd)
+        if key not in self._baseline:
+            self._baseline[key] = self.run_cmd_in_copy(rel_path, source, cmd)
+        return self._baseline[key]
+
+    def compare_tests(self, rel_path, source, patched, cmd):
+        """V3: el parche no rompe tests que pasaban. V4: algún test de explotación que
+        fallaba ahora pasa (y ninguno nuevo falla)."""
+        ok, tail, after = self.run_cmd_in_copy(rel_path, patched, cmd)
+        if after is None:  # comando sin reporte JUnit: solo código de salida
+            return ok, None, ("V3 tests ok" if ok else f"V3 tests fallan:\n{tail}")
+        _, _, before = self.baseline_failures(rel_path, source, cmd)
+        before = before or set()
+        new = after - before
+        v3 = not new
+        exp_before = {t for t in before if "exploit" in t}
+        exp_after = {t for t in after if "exploit" in t}
+        v4 = None if not exp_before else (exp_after < exp_before)
+        msg = (f"V3 {'sin regresiones' if v3 else 'REGRESIONES: ' + ', '.join(sorted(new))}"
+               f" (fallas {len(before)} -> {len(after)})")
+        if exp_before:
+            msg += (f"; V4 tests de explotación que fallaban: {len(exp_before)} -> {len(exp_after)}")
+        return v3, v4, msg
 
     def validate(self, source: str, group: RepairGroup, before_total: int) -> Validation:
         v = Validation()
@@ -115,11 +156,12 @@ class Validator:
                 return v
 
         if self.test_cmd:
-            ok, tail = self.run_cmd_in_copy(group.path, patched, self.test_cmd)
-            v.v3_tests = ok
-            v.details.append("V3 tests ok" if ok else f"V3 tests fallan:\n{tail}")
+            v.v3_tests, v4, msg = self.compare_tests(group.path, source, patched, self.test_cmd)
+            v.details.append(msg)
+            if v4 is not None:
+                v.v4_exploit_blocked = v4
         if self.exploit_cmd and v.v3_tests is not False:
-            ok, tail = self.run_cmd_in_copy(group.path, patched, self.exploit_cmd)
+            ok, tail, _ = self.run_cmd_in_copy(group.path, patched, self.exploit_cmd)
             v.v4_exploit_blocked = ok
             v.details.append("V4 exploit bloqueado" if ok else f"V4 el exploit sigue funcionando:\n{tail}")
         return v

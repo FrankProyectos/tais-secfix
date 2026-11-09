@@ -24,7 +24,7 @@ def validation_line(val) -> str:
 
 def comment_body(group, as_suggestion: bool) -> str:
     head = "\n".join(
-        f"**{f.cwe}** · `{f.short_rule}` (línea {f.line}) — veredicto del LLM: **verdadero positivo**"
+        f"- **{f.cwe}** · `{f.short_rule}` (línea {f.line}) — veredicto del LLM: **verdadero positivo**"
         f" (confianza {f.confidence:.2f}). {f.justification}" for f in group.findings)
     body = [f"<!-- secfix:{group.group_id} -->", "### 🔒 secfix: vulnerabilidad confirmada", head, ""]
     if group.accepted:
